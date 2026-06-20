@@ -1,0 +1,19 @@
+# Terraform
+.terraform/
+*.tfstate
+*.tfstate.*
+terraform.tfvars
+.terraform.lock.hcl
+
+# Ansible
+*.retry
+
+# Linux
+*.swp
+*~
+
+# VS Code
+.vscode/
+
+# Logs
+*.log
