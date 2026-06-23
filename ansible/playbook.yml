@@ -1,0 +1,15 @@
+---
+- name: Configurar máquina virtual para ejecutar contenedores con Podman
+  hosts: web
+  become: true
+
+  tasks:
+    - name: Actualizar caché de paquetes APT
+      ansible.builtin.apt:
+        update_cache: true
+        cache_valid_time: 3600
+
+    - name: Instalar Podman
+      ansible.builtin.apt:
+        name: podman
+        state: present
