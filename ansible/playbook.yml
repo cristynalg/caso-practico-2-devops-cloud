@@ -13,3 +13,10 @@
       ansible.builtin.apt:
         name: podman
         state: present
+
+    - name: Instalar colección de herramientas útiles
+      ansible.builtin.apt:
+        name:
+          - curl
+          - jq
+        state: present
