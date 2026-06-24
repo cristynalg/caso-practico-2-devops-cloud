@@ -8,12 +8,14 @@ terraform.tfvars
 # Ansible
 *.retry
 
-# Linux
-*.swp
-*~
-
-# VS Code
-.vscode/
+# Claves SSH privadas
+*.pem
+*.ppk
+id_rsa
+id_ed25519
 
 # Logs
 *.log
+
+# VS Code
+.vscode/

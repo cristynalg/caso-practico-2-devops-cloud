@@ -1,0 +1,113 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Caso Práctico 2 - DevOps & Cloud</title>
+    <style>
+        body {
+            margin: 0;
+            font-family: Arial, Helvetica, sans-serif;
+            background: linear-gradient(135deg, #1e3c72, #2a5298);
+            color: #ffffff;
+            min-height: 100vh;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        .card {
+            background: rgba(255, 255, 255, 0.12);
+            border-radius: 18px;
+            padding: 40px;
+            max-width: 760px;
+            box-shadow: 0 12px 35px rgba(0, 0, 0, 0.25);
+            backdrop-filter: blur(6px);
+            text-align: center;
+        }
+
+        h1 {
+            margin-top: 0;
+            font-size: 2.2rem;
+        }
+
+        .subtitle {
+            font-size: 1.1rem;
+            margin-bottom: 30px;
+            opacity: 0.95;
+        }
+
+        .grid {
+            display: grid;
+            grid-template-columns: repeat(auto-fit, minmax(180px, 1fr));
+            gap: 16px;
+            margin-top: 25px;
+        }
+
+        .item {
+            background: rgba(255, 255, 255, 0.18);
+            border-radius: 12px;
+            padding: 18px;
+        }
+
+        .item strong {
+            display: block;
+            font-size: 1.05rem;
+            margin-bottom: 8px;
+        }
+
+        .footer {
+            margin-top: 30px;
+            font-size: 0.9rem;
+            opacity: 0.85;
+        }
+
+        .badge {
+            display: inline-block;
+            background: #ffffff;
+            color: #1e3c72;
+            padding: 8px 14px;
+            border-radius: 999px;
+            font-weight: bold;
+            margin-bottom: 20px;
+        }
+    </style>
+</head>
+<body>
+    <main class="card">
+        <div class="badge">DevOps & Cloud</div>
+
+        <h1>Caso Práctico 2</h1>
+
+        <p class="subtitle">
+            Aplicación web desplegada en Azure mediante una imagen de contenedor ejecutada con Podman.
+        </p>
+
+        <div class="grid">
+            <div class="item">
+                <strong>Infraestructura</strong>
+                Creada automáticamente con Terraform.
+            </div>
+
+            <div class="item">
+                <strong>Contenedor</strong>
+                Imagen almacenada en Azure Container Registry.
+            </div>
+
+            <div class="item">
+                <strong>Despliegue</strong>
+                Configuración automatizada mediante Ansible.
+            </div>
+
+            <div class="item">
+                <strong>Seguridad</strong>
+                Acceso mediante HTTPS y autenticación básica.
+            </div>
+        </div>
+
+        <p class="footer">
+            Página de prueba creada para verificar el despliegue de la aplicación web en la máquina virtual del caso práctico.
+        </p>
+    </main>
+</body>
+</html>

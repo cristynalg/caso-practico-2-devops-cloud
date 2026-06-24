@@ -1,0 +1,11 @@
+---
+# Datos del Azure Container Registry
+acr_login_server: "cp2cristinaacr2026.azurecr.io"
+acr_image_name: "web-nginx"
+acr_image_tag: "casopractico2"
+
+# Nombre del contenedor que se ejecutará en la VM
+web_container_name: "web-nginx"
+
+# Puerto HTTPS publicado en la VM
+web_https_port: 443
