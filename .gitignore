@@ -19,3 +19,6 @@ id_ed25519
 
 # VS Code
 .vscode/
+
+# Inventario generado automáticamente desde Terraform
+ansible/inventory.ini

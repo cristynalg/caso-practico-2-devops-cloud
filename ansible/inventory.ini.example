@@ -1,0 +1,5 @@
+[vm_podman]
+vm-cp2-cristina ansible_host=<IP_PUBLICA_VM> ansible_user=azureuser
+
+[vm_podman:vars]
+ansible_python_interpreter=/usr/bin/python3
