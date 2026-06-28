@@ -1,6 +1,6 @@
 ---
 - name: Desplegar aplicación web Nginx con Podman
-  hosts: all
+  hosts: vm_podman
   become: true
 
   tasks:

@@ -1,6 +1,6 @@
 ---
 - name: Configurar máquina virtual para ejecutar contenedores con Podman
-  hosts: web
+  hosts: vm_podman
   become: true
 
   tasks:
