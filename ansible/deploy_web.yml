@@ -1,5 +1,5 @@
 ---
-- name: Desplegar aplicación web Nginx con Podman
+- name: Desplegar aplicación web Nginx con Podman como servicio systemd
   hosts: vm_podman
   become: true
 
@@ -16,16 +16,70 @@
         tag: "{{ acr_image_tag }}"
         pull: true
 
-    - name: Eliminar contenedor anterior si existe
-      containers.podman.podman_container:
-        name: "{{ web_container_name }}"
-        state: absent
+    - name: Crear unidad systemd para el contenedor web
+      ansible.builtin.copy:
+        dest: /etc/systemd/system/container-web-nginx.service
+        owner: root
+        group: root
+        mode: "0644"
+        content: |
+          [Unit]
+          Description=Contenedor web Nginx del Caso Practico 2
+          Wants=network-online.target
+          After=network-online.target
 
-    - name: Ejecutar contenedor web con HTTPS
-      containers.podman.podman_container:
+          [Service]
+          Restart=always
+          TimeoutStartSec=60
+          ExecStartPre=-/usr/bin/podman rm -f {{ web_container_name }}
+          ExecStart=/usr/bin/podman run --name {{ web_container_name }} --replace -p {{ web_https_port }}:443 {{ acr_login_server }}/{{ acr_image_name }}:{{ acr_image_tag }}
+          ExecStop=/usr/bin/podman stop -t 10 {{ web_container_name }}
+          ExecStopPost=-/usr/bin/podman rm -f {{ web_container_name }}
+
+          [Install]
+          WantedBy=multi-user.target
+
+    - name: Recargar systemd
+      ansible.builtin.systemd_service:
+        daemon_reload: true
+
+    - name: Habilitar y arrancar servicio del contenedor web
+      ansible.builtin.systemd_service:
+        name: container-web-nginx.service
+        enabled: true
+        state: restarted
+
+    - name: Obtener estado de los servicios systemd
+      ansible.builtin.service_facts:
+
+    - name: Validar que el servicio web está arrancado y habilitado
+      ansible.builtin.assert:
+        that:
+          - ansible_facts.services['container-web-nginx.service'].state == 'running'
+          - ansible_facts.services['container-web-nginx.service'].status == 'enabled'
+        success_msg: "El servicio container-web-nginx.service está running y enabled."
+        fail_msg: "El servicio container-web-nginx.service no está correctamente arrancado o habilitado."
+
+    - name: Obtener información del contenedor web
+      containers.podman.podman_container_info:
         name: "{{ web_container_name }}"
-        image: "{{ acr_login_server }}/{{ acr_image_name }}:{{ acr_image_tag }}"
-        state: started
-        restart_policy: always
-        ports:
-          - "{{ web_https_port }}:443"
+      register: web_container_info
+
+    - name: Validar que el contenedor web está ejecutándose
+      ansible.builtin.assert:
+        that:
+          - web_container_info.containers | length == 1
+          - web_container_info.containers[0].State.Status == 'running'
+        success_msg: "El contenedor {{ web_container_name }} está ejecutándose correctamente."
+        fail_msg: "El contenedor {{ web_container_name }} no está en estado running."
+
+    - name: Mostrar resumen final del despliegue web
+      ansible.builtin.debug:
+        msg:
+          - "Servicio systemd: container-web-nginx.service"
+          - "Estado del servicio: {{ ansible_facts.services['container-web-nginx.service'].state }}"
+          - "Servicio habilitado: {{ ansible_facts.services['container-web-nginx.service'].status }}"
+          - "Contenedor: {{ web_container_name }}"
+          - "Estado del contenedor: {{ web_container_info.containers[0].State.Status }}"
+          - "Imagen desplegada: {{ acr_login_server }}/{{ acr_image_name }}:{{ acr_image_tag }}"
+          - "Puerto publicado: {{ web_https_port }} -> 443"
