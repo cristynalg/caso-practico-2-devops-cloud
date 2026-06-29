@@ -1,0 +1,26 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: contador-deployment
+spec:
+  replicas: 1
+  selector:
+    matchLabels:
+      app: contador
+  template:
+    metadata:
+      labels:
+        app: contador
+    spec:
+      containers:
+        - name: contador
+          image: cp2cristinaacr2026.azurecr.io/k8s-contador:casopractico2
+          ports:
+            - containerPort: 8080
+          volumeMounts:
+            - name: contador-storage
+              mountPath: /data
+      volumes:
+        - name: contador-storage
+          persistentVolumeClaim:
+            claimName: contador-pvc

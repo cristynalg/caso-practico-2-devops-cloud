@@ -42,3 +42,13 @@ output "vm_admin_username" {
   description = "Usuario administrador configurado para acceder por SSH a la máquina virtual."
   value       = var.admin_username
 }
+
+output "aks_name" {
+  description = "Nombre del cluster AKS"
+  value       = azurerm_kubernetes_cluster.aks.name
+}
+
+output "aks_kubelet_identity_object_id" {
+  description = "Object ID de la identidad kubelet usada por AKS para descargar imágenes"
+  value       = azurerm_kubernetes_cluster.aks.kubelet_identity[0].object_id
+}

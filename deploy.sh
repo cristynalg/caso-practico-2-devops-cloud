@@ -6,20 +6,20 @@ set -euo pipefail
 # Se coloca en la raíz del proyecto
 cd "$(dirname "$0")"
 
-echo " Despliegue ACR + VM + Podman + Ansible"
-echo " "
+echo -e "\n Despliegue ACR + VM + Podman + Ansible"
 
-# Obtiene la suscripción de Azure. Mira si ya existe la variable y si no, que la obtenga automaticamente
-echo "==> Obteniendo suscripción de Azure"
+# Obtiene la suscripción de Azure. Mira si ya existe la variable y si no, la obtiene automaticamente
+echo -e "\n ==> Obteniendo suscripción de Azure"
 export ARM_SUBSCRIPTION_ID="${ARM_SUBSCRIPTION_ID:-$(az account show --query id -o tsv)}"
 
 # Ejecuta terraform. Con init inicializa Terraform. Con apply crea o actualiza la infra que se haya definido en los archivos *.tf
-echo "==> Aplicando infraestructura con terraform"
+echo -e "\n ==> Aplicando infraestructura con terraform"
 terraform -chdir=terraform init
 terraform -chdir=terraform apply -var="subscription_id=${ARM_SUBSCRIPTION_ID}" -auto-approve
 
+
 # Lee los outputs de Terraform. Estas variables evitan que tenga que estar tocando archivos por cada destroy y apply posterior que pueda hacer
-echo "==> Obteniendo outputs de terraform"
+echo -e "\n ==> Obteniendo outputs de terraform"
 VM_IP=$(terraform -chdir=terraform output -raw vm_public_ip)
 VM_USER=$(terraform -chdir=terraform output -raw vm_admin_username)
 ACR_SERVER=$(terraform -chdir=terraform output -raw acr_login_server)
@@ -27,25 +27,25 @@ ACR_USER=$(terraform -chdir=terraform output -raw acr_admin_username)
 ACR_PASS=$(terraform -chdir=terraform output -raw acr_admin_password)
 
 # Muestro los datos obtenidos más importantes de los outputs
-echo "==> Datos obtenidos"
+echo -e "\n ==> Datos obtenidos:"
 echo "VM pública: ${VM_IP}"
 echo "Usuario VM: ${VM_USER}"
 echo "ACR: ${ACR_SERVER}"
 
 # Con podman build construimos la imagen de nuestra web
-echo "==> Construyendo imagen web Nginx"
+echo -e "\n ==> Construyendo imagen web Nginx"
 podman build --no-cache -t "${ACR_SERVER}/web-nginx:casopractico2" images/web-nginx
   
-# Con podman login iniciamos sesion en el ACR desde mi nodo de control
-echo "==> Iniciando sesión en ACR desde el nodo de control"
+# Con podman login iniciamos sesion en el ACR desde el nodo de control
+echo -e "\n ==> Iniciando sesión en ACR desde el nodo de control"
 podman login "${ACR_SERVER}" -u "${ACR_USER}" -p "${ACR_PASS}"
 
 # Y con podman push subimos la imagen ya construida al ACR
-echo "==> Subiendo imagen web Nginx al ACR"
+echo -e "\n ==> Subiendo imagen web Nginx al ACR"
 podman push "${ACR_SERVER}/web-nginx:casopractico2"  
   
 # Genero archivo de inventario de Ansible con la IP actual de este momento de la VM.
-echo "==> Generando inventario de Ansible"
+echo -e "\n ==> Generando inventario de Ansible"
 cat > ansible/inventory.ini <<EOF
 [vm_podman]
 vm-cp2-cristina ansible_host=${VM_IP} ansible_user=${VM_USER}
@@ -55,16 +55,16 @@ ansible_python_interpreter=/usr/bin/python3
 ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'
 EOF
 
-echo "==> Inventario generado:"
+echo -e "\n ==> Inventario generado:"
 cat ansible/inventory.ini
 
-echo "==> Eliminando posible clave SSH antigua de known_hosts para esta IP"
+echo -e "\n ==> Eliminando posible clave SSH antigua de known_hosts para esta IP"
 ssh-keygen -R "${VM_IP}" >/dev/null 2>&1 || true
 
-echo "==> Instalando colección de Ansible para Podman si no existe"
+echo -e "\n ==> Instalando colección de Ansible para Podman si no existe"
 ansible-galaxy collection install containers.podman >/dev/null
 
-echo "==> Esperando a que la VM acepte conexiones SSH"
+echo -e "\n ==> Esperando a que la VM acepte conexiones SSH"
 for intento in {1..30}; do
   if ansible vm_podman -i ansible/inventory.ini -m ping >/dev/null 2>&1; then
     echo "La VM responde correctamente por Ansible."
@@ -80,20 +80,17 @@ for intento in {1..30}; do
   sleep 10
 done
 
-echo "==> Configurando la VM con Podman"
+echo -e "\n ==> Configurando la VM con Podman"
 ansible-playbook -i ansible/inventory.ini ansible/playbook.yml
 
-echo "==> Desplegando aplicación web Nginx con Podman"
+echo -e "\n ==> Desplegando aplicación web Nginx con Podman"
 ansible-playbook -i ansible/inventory.ini ansible/deploy_web.yml -e "acr_username=${ACR_USER}" -e "acr_password=${ACR_PASS}"
 
-echo "==> Comprobando contenedor desplegado"
-ansible vm_podman -i ansible/inventory.ini -b -m command -a "podman ps"
-
 # Ya tenemos configurada la VM y desplegada la web con Nginx gracias a Podman
-echo "==> Despliegue finalizado correctamente"
-echo "URL de la aplicación web:"
+echo -e "\n ==> Despliegue finalizado correctamente"
+echo -e "\n URL de la aplicación web:"
 echo "https://${VM_IP}"
 
-echo "Credenciales del acceso web:"
+echo -e "\n Credenciales del acceso web:"
 echo "usuario: alumno"
 echo "contraseña: unir2026"
