@@ -15,6 +15,18 @@
     - kubernetes.core
 
   vars:
+    # Grupo de recursos gestionado de AKS.
+    # Azure crea este grupo automáticamente para alojar recursos internos del clúster,
+    # como el Load Balancer, interfaces de red, discos e IPs públicas.
+    # Se pasa desde deploy.sh porque el nombre lo genera Azure.
+    aks_node_resource_group: ""
+
+    # Nombre de la IP pública existente dentro del grupo gestionado de AKS.
+    # Se reutiliza para el Service LoadBalancer de la aplicación contador.
+    # Esto evita que Kubernetes intente crear una nueva IP pública y falle
+    # por el límite regional de IPs públicas de la suscripción.
+    aks_lb_public_ip_name: ""
+
     # Python del entorno virtual usado por los módulos Kubernetes de Ansible.
     # Evita instalar paquetes Python en el sistema global de Ubuntu.
     ansible_python_interpreter: "{{ playbook_dir }}/../.venv-ansible/bin/python"
@@ -110,8 +122,28 @@
                     persistentVolumeClaim:
                       claimName: "{{ pvc_name }}"
 
+    # Antes de crear el Service LoadBalancer, se comprueba que deploy.sh
+    # ha pasado correctamente los datos necesarios para reutilizar la IP pública
+    # existente del Load Balancer de AKS.
+    # Si estas variables están vacías, el Service intentaría crear una IP nueva
+    # y volveríamos al error PublicIPCountLimitReached.
+    - name: Comprobar datos de la IP pública existente de AKS
+      ansible.builtin.assert:
+        that:
+          - aks_node_resource_group | length > 0
+          - aks_lb_public_ip_name | length > 0
+        fail_msg: "Faltan aks_node_resource_group o aks_lb_public_ip_name para reutilizar la IP pública de AKS."
+    
     # El Service de tipo LoadBalancer permite acceder a la aplicación desde Internet.
-    # Azure creará automáticamente una IP pública para este Service.
+    # En un escenario normal, Azure crearía una nueva IP pública para este Service.
+    # Sin embargo, en esta suscripción se alcanzó el límite de IPs públicas
+    # permitidas en la región swedencentral.
+    # Para solucionarlo, se añaden anotaciones específicas de AKS:
+    # - service.beta.kubernetes.io/azure-load-balancer-resource-group:
+    #   indica el grupo de recursos gestionado donde está el Load Balancer de AKS.
+    # - service.beta.kubernetes.io/azure-pip-name:
+    #   indica el nombre de la IP pública ya existente que se quiere reutilizar.
+    # Así el Service no intenta crear una cuarta IP pública.
     - name: Crear Service LoadBalancer para exponer la aplicación contador
       kubernetes.core.k8s:
         state: present
@@ -123,6 +155,9 @@
           metadata:
             name: "{{ service_name }}"
             namespace: "{{ app_namespace }}"
+            annotations:
+              service.beta.kubernetes.io/azure-load-balancer-resource-group: "{{ aks_node_resource_group }}"
+              service.beta.kubernetes.io/azure-pip-name: "{{ aks_lb_public_ip_name }}"
           spec:
             type: LoadBalancer
             selector:

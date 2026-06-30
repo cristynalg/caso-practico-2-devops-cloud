@@ -104,6 +104,29 @@ ansible-playbook -i ansible/inventory.ini ansible/playbook_deploy_web_podman.yml
 echo -e "\n ==> Configurando acceso kubectl al cluster AKS"
 az aks get-credentials --resource-group "${RESOURCE_GROUP}" --name "${AKS_NAME}" --overwrite-existing
 
+# El Service de tipo LoadBalancer necesita una IP pública para exponer la aplicación.
+# En esta suscripción de Azure existe un límite de 3 IPs públicas por región.
+# Como ya se han usado 3 IPs en swedencentral, Kubernetes no puede crear una cuarta IP
+# y el Service se queda en estado EXTERNAL-IP <pending>.
+# Para evitar ese problema, se reutiliza la IP pública que AKS ya tiene creada
+# en su grupo de recursos gestionado. Ese grupo se llama normalmente:
+# MC_<resource-group>_<aks-name>_<region>
+# Terraform crea el AKS, pero Azure crea internamente este grupo gestionado.
+# Por eso obtenemos el nombre mediante Azure CLI.
+
+echo -e "\n ==> Obteniendo grupo de recursos gestionado de AKS"
+AKS_NODE_RG=$(az aks show --resource-group "${RESOURCE_GROUP}" --name "${AKS_NAME}" --query nodeResourceGroup -o tsv)
+
+# Dentro del grupo gestionado de AKS ya existe una IP pública asociada
+# al Load Balancer del clúster. Se reutilizará para el Service contador.
+echo -e "\n ==> Obteniendo IP pública existente del Load Balancer de AKS"
+AKS_LB_PUBLIC_IP_NAME=$(az network public-ip list --resource-group "${AKS_NODE_RG}" --query "[0].name" -o tsv)
+AKS_LB_PUBLIC_IP=$(az network public-ip show --resource-group "${AKS_NODE_RG}" --name "${AKS_LB_PUBLIC_IP_NAME}" --query ipAddress -o tsv)
+
+echo "Resource Group gestionado de AKS: ${AKS_NODE_RG}"
+echo "Nombre de la IP pública reutilizada: ${AKS_LB_PUBLIC_IP_NAME}"
+echo "IP pública reutilizada: ${AKS_LB_PUBLIC_IP}"
+
 echo -e "\n ==> Construyendo imagen de la aplicación contador para Kubernetes"
 podman build --no-cache -t "${ACR_SERVER}/k8s-contador:casopractico2" images/k8s-contador
 
@@ -118,8 +141,16 @@ python3 -m venv .venv-ansible
 .venv-ansible/bin/python -m pip install --upgrade pip >/dev/null
 .venv-ansible/bin/python -m pip install kubernetes >/dev/null
 
+# Se despliega la aplicación contador en AKS usando Ansible.
+# Además del ACR, se pasan dos variables relacionadas con la IP pública:
+# - aks_node_resource_group:
+#   grupo de recursos gestionado de AKS donde está el Load Balancer real.
+# - aks_lb_public_ip_name:
+#   nombre de la IP pública ya existente que se reutilizará en el Service.
+# Estas variables permiten que el Service LoadBalancer no intente crear
+# una nueva IP pública, evitando el error PublicIPCountLimitReached.
 echo -e "\n ==> Desplegando aplicación contador en AKS con Ansible"
-ansible-playbook ansible/playbook_deploy_k8s.yml -e "acr_login_server=${ACR_SERVER}"
+ansible-playbook ansible/playbook_deploy_k8s.yml -e "acr_login_server=${ACR_SERVER}" -e "aks_node_resource_group=${AKS_NODE_RG}" -e "aks_lb_public_ip_name=${AKS_LB_PUBLIC_IP_NAME}"
 
 # Añado un bucle para esperar la IP del LoadBalancer y obtener la IP pública de la app contador
 echo -e "\n ==> Esperando a que la aplicación contador tenga IP pública"
