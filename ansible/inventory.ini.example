@@ -1,5 +1,9 @@
+# Fichero de ejemplo.
+# El inventario real ansible/inventory.ini se genera automáticamente desde deploy.sh
+# usando la IP pública obtenida de los outputs de Terraform.
 [vm_podman]
 vm-cp2-cristina ansible_host=<IP_PUBLICA_VM> ansible_user=azureuser
 
 [vm_podman:vars]
 ansible_python_interpreter=/usr/bin/python3
+ansible_ssh_common_args='-o StrictHostKeyChecking=accept-new'

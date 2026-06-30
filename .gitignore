@@ -22,3 +22,6 @@ id_ed25519
 
 # Inventario generado automáticamente desde Terraform
 ansible/inventory.ini
+
+# Entorno Python
+.venv-ansible/

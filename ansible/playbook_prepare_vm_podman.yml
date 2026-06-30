@@ -1,4 +1,8 @@
 ---
+# Prepara la máquina virtual Linux creada por Terraform.
+# Instala Podman y herramientas necesarias para ejecutar contenedores.
+# Este playbook se ejecuta contra el grupo vm_podman del inventario generado por deploy.sh.
+
 - name: Configurar máquina virtual para ejecutar contenedores con Podman
   hosts: vm_podman
   become: true

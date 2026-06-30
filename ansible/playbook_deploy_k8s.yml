@@ -1,0 +1,161 @@
+---
+# Playbook para desplegar la aplicación contador en AKS.
+# Este playbook no se ejecuta contra la VM de Azure, sino desde el nodo de control.
+# Utiliza el kubeconfig configurado previamente con "az aks get-credentials"
+# para comunicarse con el API Server de Kubernetes.
+
+- name: Desplegar aplicación contador persistente en AKS
+  hosts: localhost
+  connection: local
+  gather_facts: false
+
+  # Colección de Ansible que permite gestionar recursos Kubernetes
+  # mediante módulos nativos, evitando usar command o shell.
+  collections:
+    - kubernetes.core
+
+  vars:
+    # Python del entorno virtual usado por los módulos Kubernetes de Ansible.
+    # Evita instalar paquetes Python en el sistema global de Ubuntu.
+    ansible_python_interpreter: "{{ playbook_dir }}/../.venv-ansible/bin/python"
+
+    # Nombre lógico de la aplicación. Se usa también como etiqueta de Kubernetes.
+    app_name: contador
+
+    # Namespace donde se desplegarán los recursos.
+    # Para el caso práctico se usa el namespace default.
+    app_namespace: default
+
+    # Imagen de la aplicación contador.
+    # El servidor ACR se pasa desde deploy.sh mediante la variable acr_login_server.
+    app_image: "{{ acr_login_server }}/k8s-contador:casopractico2"
+
+    # Nombre del PVC que usará la aplicación para guardar el contador.
+    pvc_name: contador-pvc
+
+    # Nombre del Deployment que gestionará el pod de la aplicación.
+    deployment_name: contador-deployment
+
+    # Nombre del Service que expondrá la aplicación hacia Internet.
+    service_name: contador-service
+
+    # Tamaño solicitado para el volumen persistente.
+    pvc_size: 1Gi
+
+    # StorageClass de AKS basada en Azure Disk.
+    # Es adecuada para una aplicación con una única réplica y acceso ReadWriteOnce.
+    storage_class: managed-csi
+
+  tasks:
+    # El PVC es la petición de almacenamiento persistente.
+    # Kubernetes usará la StorageClass managed-csi para aprovisionar un Azure Disk.
+    - name: Crear PersistentVolumeClaim para la aplicación contador
+      kubernetes.core.k8s:
+        state: present
+        definition:
+          apiVersion: v1
+          kind: PersistentVolumeClaim
+          metadata:
+            name: "{{ pvc_name }}"
+            namespace: "{{ app_namespace }}"
+          spec:
+            accessModes:
+              - ReadWriteOnce
+            storageClassName: "{{ storage_class }}"
+            resources:
+              requests:
+                storage: "{{ pvc_size }}"
+
+    # El Deployment define cómo se ejecuta la aplicación.
+    # Se configura una única réplica porque el volumen usa ReadWriteOnce.
+    # La imagen se descarga desde el ACR privado gracias al permiso AcrPull
+    # asignado previamente al kubelet de AKS con Terraform.
+    - name: Crear Deployment de la aplicación contador
+      kubernetes.core.k8s:
+        state: present
+        wait: true
+        wait_timeout: 180
+        definition:
+          apiVersion: apps/v1
+          kind: Deployment
+          metadata:
+            name: "{{ deployment_name }}"
+            namespace: "{{ app_namespace }}"
+          spec:
+            replicas: 1
+            selector:
+              matchLabels:
+                app: "{{ app_name }}"
+            template:
+              metadata:
+                labels:
+                  app: "{{ app_name }}"
+              spec:
+                containers:
+                  - name: "{{ app_name }}"
+                    image: "{{ app_image }}"
+                    imagePullPolicy: Always
+                    ports:
+                      - containerPort: 8080
+
+                    # Se monta el PVC dentro del contenedor en /data.
+                    # La aplicación Python guarda ahí el fichero contador.txt.
+                    volumeMounts:
+                      - name: contador-storage
+                        mountPath: /data
+
+                # Asociación entre el volumen usado por el pod y el PVC creado antes.
+                volumes:
+                  - name: contador-storage
+                    persistentVolumeClaim:
+                      claimName: "{{ pvc_name }}"
+
+    # El Service de tipo LoadBalancer permite acceder a la aplicación desde Internet.
+    # Azure creará automáticamente una IP pública para este Service.
+    - name: Crear Service LoadBalancer para exponer la aplicación contador
+      kubernetes.core.k8s:
+        state: present
+        wait: true
+        wait_timeout: 180
+        definition:
+          apiVersion: v1
+          kind: Service
+          metadata:
+            name: "{{ service_name }}"
+            namespace: "{{ app_namespace }}"
+          spec:
+            type: LoadBalancer
+            selector:
+              app: "{{ app_name }}"
+            ports:
+              - protocol: TCP
+                port: 80
+                targetPort: 8080
+
+    # Espera hasta que Azure asigne una IP pública al Service LoadBalancer.
+    # La IP puede tardar unos segundos o minutos en aparecer.
+    - name: Esperar a que el Service contador tenga IP pública
+      kubernetes.core.k8s_info:
+        api_version: v1
+        kind: Service
+        name: "{{ service_name }}"
+        namespace: "{{ app_namespace }}"
+      register: contador_service_info
+      until:
+        - contador_service_info.resources | length > 0
+        - contador_service_info.resources[0].status.loadBalancer.ingress is defined
+        - contador_service_info.resources[0].status.loadBalancer.ingress | length > 0
+        - contador_service_info.resources[0].status.loadBalancer.ingress[0].ip is defined
+      retries: 30
+      delay: 10
+
+    # Resumen final del despliegue realizado por Ansible.
+    - name: Mostrar resumen del despliegue en AKS
+      ansible.builtin.debug:
+        msg:
+          - "Aplicación desplegada: {{ app_name }}"
+          - "Imagen: {{ app_image }}"
+          - "PVC: {{ pvc_name }}"
+          - "StorageClass: {{ storage_class }}"
+          - "Service: {{ service_name }}"
+          - "URL pública: http://{{ contador_service_info.resources[0].status.loadBalancer.ingress[0].ip }}"

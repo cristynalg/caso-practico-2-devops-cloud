@@ -1,3 +1,9 @@
+# Define el clúster AKS gestionado por Azure.
+# El clúster tendrá un único nodo worker para cumplir el enunciado y reducir consumo.
+# También se asigna el rol AcrPull a la identidad kubelet para que AKS pueda descargar
+# imágenes privadas desde el Azure Container Registry sin usar credenciales en los YAML.
+
+
 # Cluster AKS gestionado por Azure para desplegar la aplicación Kubernetes
 resource "azurerm_kubernetes_cluster" "aks" {
   name                = "aks-cp2-cristina"

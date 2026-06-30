@@ -1,4 +1,8 @@
 ---
+# Despliega la aplicación web Nginx en la VM usando Podman.
+# La imagen se descarga desde el ACR privado.
+# El contenedor se gestiona como servicio systemd para que sea persistente a reinicios.
+
 - name: Desplegar aplicación web Nginx con Podman como servicio systemd
   hosts: vm_podman
   become: true

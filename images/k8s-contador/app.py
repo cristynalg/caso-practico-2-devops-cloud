@@ -23,6 +23,8 @@ def contador():
     visitas += 1
     COUNTER_FILE.write_text(str(visitas))
 
+    print(f"visita -> contador={visitas}", flush=True)
+
     fecha = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
 
     return f"""

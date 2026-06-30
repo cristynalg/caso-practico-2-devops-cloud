@@ -1,5 +1,16 @@
 #!/usr/bin/env bash
 
+# Script maestro del caso práctico.
+# Ejecuta el despliegue completo desde el nodo de control:
+# 1. Crea o actualiza la infraestructura en Azure con Terraform.
+# 2. Construye y sube las imágenes al Azure Container Registry.
+# 3. Genera el inventario dinámico de Ansible para la VM.
+# 4. Configura la VM e instala Podman.
+# 5. Despliega la app Nginx en la VM como servicio systemd.
+# 6. Configura el acceso a AKS.
+# 7. Despliega la app contador en Kubernetes con almacenamiento persistente.
+
+
 # Hace que el script falle si algo va mal
 set -euo pipefail
 
@@ -8,7 +19,7 @@ cd "$(dirname "$0")"
 
 echo -e "\n Despliegue ACR + VM + Podman + Ansible"
 
-# Obtiene la suscripción de Azure. Mira si ya existe la variable y si no, la obtiene automaticamente
+# Obtiene la suscripción de Azure. Mira si ya existe la variable y si no, la obtiene automáticamente
 echo -e "\n ==> Obteniendo suscripción de Azure"
 export ARM_SUBSCRIPTION_ID="${ARM_SUBSCRIPTION_ID:-$(az account show --query id -o tsv)}"
 
@@ -25,18 +36,22 @@ VM_USER=$(terraform -chdir=terraform output -raw vm_admin_username)
 ACR_SERVER=$(terraform -chdir=terraform output -raw acr_login_server)
 ACR_USER=$(terraform -chdir=terraform output -raw acr_admin_username)
 ACR_PASS=$(terraform -chdir=terraform output -raw acr_admin_password)
+RESOURCE_GROUP=$(terraform -chdir=terraform output -raw resource_group_name)
+AKS_NAME=$(terraform -chdir=terraform output -raw aks_name)
 
 # Muestro los datos obtenidos más importantes de los outputs
 echo -e "\n ==> Datos obtenidos:"
 echo "VM pública: ${VM_IP}"
 echo "Usuario VM: ${VM_USER}"
 echo "ACR: ${ACR_SERVER}"
+echo "Resource Group: ${RESOURCE_GROUP}"
+echo "AKS: ${AKS_NAME}"
 
 # Con podman build construimos la imagen de nuestra web
 echo -e "\n ==> Construyendo imagen web Nginx"
 podman build --no-cache -t "${ACR_SERVER}/web-nginx:casopractico2" images/web-nginx
   
-# Con podman login iniciamos sesion en el ACR desde el nodo de control
+# Con podman login iniciamos sesión en el ACR desde el nodo de control
 echo -e "\n ==> Iniciando sesión en ACR desde el nodo de control"
 podman login "${ACR_SERVER}" -u "${ACR_USER}" -p "${ACR_PASS}"
 
@@ -81,16 +96,64 @@ for intento in {1..30}; do
 done
 
 echo -e "\n ==> Configurando la VM con Podman"
-ansible-playbook -i ansible/inventory.ini ansible/playbook.yml
+ansible-playbook -i ansible/inventory.ini ansible/playbook_prepare_vm_podman.yml
 
 echo -e "\n ==> Desplegando aplicación web Nginx con Podman"
-ansible-playbook -i ansible/inventory.ini ansible/deploy_web.yml -e "acr_username=${ACR_USER}" -e "acr_password=${ACR_PASS}"
+ansible-playbook -i ansible/inventory.ini ansible/playbook_deploy_web_podman.yml -e "acr_username=${ACR_USER}" -e "acr_password=${ACR_PASS}"
+
+echo -e "\n ==> Configurando acceso kubectl al cluster AKS"
+az aks get-credentials --resource-group "${RESOURCE_GROUP}" --name "${AKS_NAME}" --overwrite-existing
+
+echo -e "\n ==> Construyendo imagen de la aplicación contador para Kubernetes"
+podman build --no-cache -t "${ACR_SERVER}/k8s-contador:casopractico2" images/k8s-contador
+
+echo -e "\n ==> Subiendo imagen contador al ACR"
+podman push "${ACR_SERVER}/k8s-contador:casopractico2"
+
+echo -e "\n ==> Instalando colección de Ansible para Kubernetes si no existe"
+ansible-galaxy collection install kubernetes.core >/dev/null
+
+echo -e "\n ==> Preparando entorno Python para Ansible y Kubernetes"
+python3 -m venv .venv-ansible
+.venv-ansible/bin/python -m pip install --upgrade pip >/dev/null
+.venv-ansible/bin/python -m pip install kubernetes >/dev/null
+
+echo -e "\n ==> Desplegando aplicación contador en AKS con Ansible"
+ansible-playbook ansible/playbook_deploy_k8s.yml -e "acr_login_server=${ACR_SERVER}"
+
+# Añado un bucle para esperar la IP del LoadBalancer y obtener la IP pública de la app contador
+echo -e "\n ==> Esperando a que la aplicación contador tenga IP pública"
+for intento in {1..30}; do
+  K8S_APP_IP=$(kubectl get service contador-service -o jsonpath='{.status.loadBalancer.ingress[0].ip}' 2>/dev/null || true)
+
+  if [ -n "${K8S_APP_IP}" ]; then
+    break
+  fi
+
+  echo "La IP pública del Service todavía no está disponible. Reintentando en 10 segundos... (${intento}/30)"
+  sleep 10
+done
+
+if [ -z "${K8S_APP_IP:-}" ]; then
+  echo "ERROR: El Service contador-service no obtuvo IP pública."
+  kubectl get service contador-service
+  exit 1
+fi
+
+echo -e "\n ==> Estado de la aplicación contador en AKS"
+kubectl get pvc,pv
+kubectl get pods -l app=contador -o wide
+kubectl get service contador-service
 
 # Ya tenemos configurada la VM y desplegada la web con Nginx gracias a Podman
 echo -e "\n ==> Despliegue finalizado correctamente"
-echo -e "\n URL de la aplicación web:"
+
+echo -e "\n URL de la aplicación web en la VM con Podman:"
 echo "https://${VM_IP}"
 
 echo -e "\n Credenciales del acceso web:"
 echo "usuario: alumno"
 echo "contraseña: unir2026"
+
+echo -e "\n URL de la aplicación contador en AKS:"
+echo "http://${K8S_APP_IP}"
