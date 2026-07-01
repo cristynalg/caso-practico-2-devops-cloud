@@ -141,7 +141,16 @@ Ejecutar el despliegue completo:
 ./deploy.sh
 ```
 
-El script realiza las siguientes acciones:
+### Consideraciones previas
+
+El despliegue crea un Azure Container Registry (ACR) con el nombre `cp2cristinaacr2026`
+
+Los nombres de los Azure Container Registry deben ser únicos globalmente en Azure. Durante el desarrollo del caso práctico, los recursos se eliminan mediante `terraform destroy`, por lo que dicho nombre debería encontrarse disponible en el momento de la evaluación.
+
+En el caso excepcional de que el nombre ya estuviera siendo utilizado, bastaría con modificar la variable `acr_name` definida en `terraform/variables.tf` por otro nombre único.
+
+
+El script `deploy.sh` realiza las siguientes acciones:
 
 1. Inicializa Terraform.
 2. Crea o actualiza la infraestructura en Azure.
